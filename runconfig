@@ -1,0 +1,111 @@
+import pexpect
+
+# Define variables
+ip_address = '192.168.56.101'
+username = 'prne'
+password = 'cisco123!'
+password_enable = 'class123!'
+
+# Log SSH session for debugging
+session_log = open('session_log.txt', 'w')
+
+print('--- Starting SSH session...')
+session = pexpect.spawn('ssh -o StrictHostKeyChecking=no ' + username + '@' + ip_address, encoding='utf-8', timeout=40)
+session.logfile = session_log  # Enable logging to file
+
+# Check for the SSH key acceptance prompt
+result = session.expect(['(yes/no)', 'Password:', pexpect.TIMEOUT, pexpect.EOF])
+
+if result == 0:
+    print('--- Accepting SSH key...')
+    session.sendline('yes')
+    result = session.expect(['Password:', pexpect.TIMEOUT, pexpect.EOF])
+
+if result != 1:
+    print('--- FAILURE! creating session for: ', ip_address)
+    session_log.close()
+    exit()
+
+print('--- Sending user password...')
+session.sendline(password)
+result = session.expect(['>', pexpect.TIMEOUT, pexpect.EOF])
+
+if result != 0:
+    print('--- FAILURE! entering password: ', password)
+    session_log.close()
+    exit()
+
+print('--- Success! SSH session established.')
+
+# Enter enable mode
+print('--- Entering enable mode...')
+session.sendline('enable')
+result = session.expect(['Password:', pexpect.TIMEOUT, pexpect.EOF])
+
+if result != 0:
+    print('--- Failure! entering enable mode')
+    session_log.close()
+    exit()
+
+# Send enable password
+session.sendline(password_enable)
+result = session.expect(['#', pexpect.TIMEOUT, pexpect.EOF])
+
+if result != 0:
+    print('--- Failure! entering enable mode after sending password')
+    session_log.close()
+    exit()
+
+# Enter configuration mode
+print('--- Entering configuration mode...')
+session.sendline('configure terminal')
+result = session.expect([r'.\(config\)#', pexpect.TIMEOUT, pexpect.EOF])
+
+if result != 0:
+    print('--- Failure! entering config mode')
+    session_log.close()
+    exit()
+
+# Change the hostname to R1
+print('--- Changing hostname to R1...')
+session.sendline('hostname R1')
+result = session.expect([r'R1\(config\)#', pexpect.TIMEOUT, pexpect.EOF])
+
+if result != 0:
+    print('--- Failure! setting hostname')
+    session_log.close()
+    exit()
+
+# Exit configuration mode
+print('--- Exiting configuration mode...')
+session.sendline('exit')
+
+# Send command to output the running configuration
+print('--- Retrieving running configuration...')
+session.sendline('show running-config')
+
+# Capture the running configuration
+running_config = session.expect([pexpect.TIMEOUT, pexpect.EOF], timeout=40)
+
+# Save running configuration to a file
+with open('running_config.txt', 'w') as config_file:
+    config_file.write(session.before)
+
+# Print confirmation
+print('--- Running configuration saved to running_config.txt')
+
+# Exit session
+session.sendline('exit')
+
+# Display success message if everything worked
+print('------------------------------------------------------')
+print('')
+print('--- Success! connecting to: ', ip_address)
+print('---               Username: ', username)
+print('---               Password: ', password)
+print('')
+print('------------------------------------------------------')
+
+# Close the SSH session
+session.close()
+session_log.close()
